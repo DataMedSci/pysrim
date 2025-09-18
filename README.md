@@ -60,7 +60,7 @@ docker run --rm -v ${PWD}:/workspace srim_pysrim:latest python /workspace/fast_s
 ```
 ```bash
 # full TRIM benchmark (minutes)
-docker run --rm -v ${PWD}:/workspace srim_pysrim:latest python /workspace/my_srim.py
+docker run --rm -v ${PWD}:/workspace srim_pysrim:latest python /workspace/example_trim.py
 ```
 
 /opt/srim is on the container’s **PATH**; the default working directory inside the container is **/workspace**.
@@ -77,6 +77,18 @@ docker run --rm -v ${PWD}:/workspace srim_pysrim:latest python /workspace/my_sri
   Docker container this is safe and expected.
 * **Performance tips** – For faster TRIM runs, lower `number_ions` in your scripts
   or spin up multiple containers in parallel and merge the outputs.
+
+---
+
+## What went wrong
+
+SRIM’s executables are launched successfully, but from the wrong working directory.
+PySRIM writes its inputs under <SRIM_DIR>/SR Module/... and then starts SRModule.exe;
+that executable expects to read its control file (e.g., SR.IN) and write outputs
+inside the SRIM program folder. When the process CWD isn’t <SRIM_DIR>/SR Module (for SR)
+or <SRIM_DIR> (for TRIM), the VB6 app aborts with Runtime error 53 (File not found)
+— exactly the failure observed under Wine. The “X connection to :99 broken” line is a side-effect
+of xvfb-run tearing down the virtual display after the Windows app exits, not the root cause.
 
 ---
 
