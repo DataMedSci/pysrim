@@ -56,12 +56,11 @@ docker build -t srim_pysrim:latest .
 
 ```bash
 # quick SR sanity check (seconds)
-docker run --rm -v ${PWD}:/workspace srim_pysrim:latest \
-       python /workspace/fast_srim.py
-
+docker run --rm -v ${PWD}:/workspace srim_pysrim:latest python /workspace/fast_srim.py
+```
+```bash
 # full TRIM benchmark (minutes)
-docker run --rm -v ${PWD}:/workspace srim_pysrim:latest \
-       python /workspace/my_srim.py
+docker run --rm -v ${PWD}:/workspace srim_pysrim:latest python /workspace/my_srim.py
 ```
 
 /opt/srim is on the container’s **PATH**; the default working directory inside the container is **/workspace**.

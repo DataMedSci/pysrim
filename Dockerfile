@@ -1,50 +1,67 @@
 # ---------------------------------------------------------------
-# SRIM 2013 + PySRIM on Python 3.11
+# SRIM 2013 + PySRIM on Python 3.11 (Debian 12 slim)
+# Implements items 1–4, 10; supports 2,3
 # ---------------------------------------------------------------
 FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     WINEDLLOVERRIDES="mscoree,mshtml=" \
     WINEDEBUG="-all" \
-    DISPLAY=:1
+    DISPLAY=:1 \
+    WINEPREFIX=/opt/wine32 \
+    WINEARCH=win32
 
-# --- Wine, Winetricks, helpers ---------------------------------
+# 1) Wine, Winetricks, Xvfb, narzędzia
 RUN dpkg --add-architecture i386 \
  && printf "deb http://deb.debian.org/debian bookworm main contrib\n" \
       > /etc/apt/sources.list.d/contrib.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-        wine wine32 wine64 xvfb xauth winetricks cabextract unzip \
-        wget p7zip-full \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
+      ca-certificates wget unzip p7zip-full cabextract xauth xvfb \
+      wine wine32:i386 winetricks \
+ && rm -rf /var/lib/apt/lists/*
 
-# --- wrap wine with xvfb-run (MUST come before winetricks) -----
+# 3) Wrapper: zawsze uruchamiaj wine przez xvfb-run (headless GUI)
 RUN mv /usr/bin/wine /usr/bin/wine-bin \
- && printf '#!/bin/sh\nexec xvfb-run -a /usr/bin/wine-bin "$@"\n' \
-         > /usr/local/bin/wine \
+ && printf '#!/bin/sh\nexec xvfb-run -a -s "-screen 0 1024x768x16" /usr/bin/wine-bin "$@"\n' \
+      > /usr/local/bin/wine \
  && chmod +x /usr/local/bin/wine
 
-# --- fresh 32-bit prefix + VB6 runtime -------------------------
-RUN rm -rf /root/.wine \
- && WINEARCH=win32 wineboot --init \
- && winetricks -q vb6run        # installs MSVBVM60.DLL & OCXs
+# 1+2) Stały 32-bit prefix + VB6 runtime i klasyczne OCX/MFC
+RUN rm -rf "$WINEPREFIX" \
+ && wineboot --init \
+ && winetricks -q vb6run comctl32ocx mfc42
 
-# --- download & unpack SRIM 2013 -------------------------------
+# 4) SRIM 2013 — spłaszczenie do /opt/srim (ma zawierać "SR Module/" i TRIM.exe)
 RUN mkdir -p /opt/srim \
- && wget -q -O /tmp/SRIM-2013.e \
-        http://www.srim.org/SRIM/SRIM-2013-Std.e \
- && 7z x -o/opt/srim /tmp/SRIM-2013.e \
- && rm /tmp/SRIM-2013.e
+ && wget -q -O /tmp/SRIM-2013.e http://www.srim.org/SRIM/SRIM-2013-Std.e \
+ && 7z x -y -o/tmp/srim_unpack /tmp/SRIM-2013.e \
+ && set -e; \
+    if [ -d "/tmp/srim_unpack/SR Module" ] || [ -f "/tmp/srim_unpack/TRIM.exe" ]; then \
+        cp -a /tmp/srim_unpack/. /opt/srim/; \
+    else \
+        inner="$(find /tmp/srim_unpack -mindepth 1 -maxdepth 1 -type d -name 'SRIM*' | head -n1)"; \
+        if [ -n "$inner" ]; then \
+            cp -a "$inner"/. /opt/srim/; \
+        else \
+            cp -a /tmp/srim_unpack/. /opt/srim/; \
+        fi; \
+    fi \
+ && rm -rf /tmp/SRIM-2013.e /tmp/srim_unpack \
+ && test -f "/opt/srim/SR Module/SRModule.exe" \
+ && test -f "/opt/srim/TRIM.exe"
 
-# --- Python stack ----------------------------------------------
-RUN pip install --no-cache-dir \
-        numpy==2.3.1 pysrim==0.5.10 \
+
+# 10) Python: pin wersji + patch yaml.safe_load
+RUN pip install --no-cache-dir numpy==2.3.1 pysrim==0.5.10 \
  && python - <<'PY'
 import sysconfig, pathlib, re
-f = pathlib.Path(sysconfig.get_paths()['purelib']) / 'srim/core/elementdb.py'
-f.write_text(re.sub(r'yaml\.load\(', 'yaml.safe_load(', f.read_text(), 1))
-print("✓ Patched", f)
+p = pathlib.Path(sysconfig.get_paths()['purelib']) / 'srim/core/elementdb.py'
+p.write_text(re.sub(r'yaml\.load\(', 'yaml.safe_load(', p.read_text(), 1))
+print("✓ Patched", p)
 PY
 
+# 6) Katalog roboczy projektu
+RUN mkdir -p /work
 WORKDIR /workspace
 CMD ["python"]

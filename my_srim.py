@@ -1,15 +1,34 @@
-"""
-Two SRIM/TRIM benchmarks:
-A) 50 MeV proton projected range in 4 cm water
-B) 60 MeV proton exit energy after 1 cm water (10 000 ions)
-"""
+# --- SRIM runtime bootstrap (items 1,5,6,7,9) --------------------------
+import os, glob
 from pathlib import Path
-import numpy as np
 from srim import Ion, Layer, Target, TRIM
 from srim.output import Range, Results
 
-BIN  = "/opt/srim"          # inside the container
-OUT  = Path("/workspace/runs"); OUT.mkdir(exist_ok=True)
+# 1) Stały 32-bit prefix
+os.environ.setdefault("WINEPREFIX", "/opt/wine32")
+
+# 5) BIN autodetect
+BIN = "/opt/srim"
+if not os.path.isdir(os.path.join(BIN, "SR Module")):
+    for cand in ["/opt/srim/SRIM"] + sorted(glob.glob("/opt/srim/SRIM*")):
+        if os.path.isdir(os.path.join(cand, "SR Module")):
+            BIN = cand
+            break
+
+# 6) Roboczy katalog na wyniki
+os.makedirs("/work", exist_ok=True)
+try:
+    os.chdir("/work")
+except Exception:
+    pass
+OUT  = Path("/work/runs"); OUT.mkdir(parents=True, exist_ok=True)
+
+# 7) Log diagnostyczny
+print(f"[SRIM] WINEPREFIX={os.environ.get('WINEPREFIX')}  BIN={BIN}  CWD={os.getcwd()}")
+print("[SRIM] SRModule:",
+      os.path.isfile(os.path.join(BIN, "SR Module", "SRModule.exe")),
+      "TRIM:", os.path.isfile(os.path.join(BIN, "TRIM.exe")))
+# --- Scenariusze obliczeniowe --------------------------------------------
 
 def water(cm):
     return Layer({"H": {"stoich": 2}, "O": {"stoich": 1}},
